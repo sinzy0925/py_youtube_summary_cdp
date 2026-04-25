@@ -1,3 +1,7 @@
+# Python
+__pycache__/
+*.py[cod]
+
 # CDP 用 Chrome プロファイル（Cookie 等をコミットしない）
 chrome_cdp_profile/
 
