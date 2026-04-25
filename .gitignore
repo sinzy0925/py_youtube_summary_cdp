@@ -1,0 +1,8 @@
+# CDP 用 Chrome プロファイル（Cookie 等をコミットしない）
+chrome_cdp_profile/
+
+# ローカル仮想環境（py -3.12 -m venv 等）
+.venv/
+# WSL/Linux 専用（scripts/bootstrap_venv_wsl.sh）
+venv_wsl/
+.env
