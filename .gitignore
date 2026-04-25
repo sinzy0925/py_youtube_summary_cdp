@@ -4,6 +4,9 @@ __pycache__/
 
 # action_gemini が保存する直近の画面キャプチャ
 youtube_cdp_screenshot.png
+youtube_cdp_gemini_debug.html
+youtube_cdp_gemini_debug_full.png
+youtube_cdp_gemini_debug_meta.txt
 
 # CDP 用 Chrome プロファイル（Cookie 等をコミットしない）
 chrome_cdp_profile/

@@ -50,6 +50,12 @@ DEFAULT_GEMINI_VIDEO = "https://www.youtube.com/watch?v=O8PzL3S-TbU"
 # gemini: 動画ページ表示直後の待機秒 → スクリーンショット
 GEMINI_POST_GOTO_SCREENSHOT_SEC = 2.0
 GEMINI_SCREENSHOT_FILENAME = "youtube_cdp_screenshot.png"
+# 診断: 失敗時 & YOUTUBE_CDP_GEMINI_DEBUG=1 のときリポジトリ直下へ保存
+GEMINI_DEBUG_HTML = "youtube_cdp_gemini_debug.html"
+GEMINI_DEBUG_FULL_PNG = "youtube_cdp_gemini_debug_full.png"
+GEMINI_DEBUG_META_TXT = "youtube_cdp_gemini_debug_meta.txt"
+GEMINI_DEBUG_HTML_MAX_CHARS = 1_500_000
+GEMINI_DEBUG_BODY_MAX_CHARS = 8_000
 # 上記のセレクタで取れないときの accessible name 用（英語UI等・大小文字は re.IGNORECASE）
 DEFAULT_GEMINI_NAME_PATTERN = r"(質問する|gemini|ask)"
 # 動画下メニュー「質問する」（Gemini チャット入口）:
@@ -907,6 +913,57 @@ def _click_locator_with_visible_or_force(
         el.click(timeout=click_timeout_ms, force=True)
 
 
+def _gemini_debug_artifacts_enabled() -> bool:
+    v = (os.environ.get("YOUTUBE_CDP_GEMINI_DEBUG") or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
+def _log_gemini_page_brief(page: Page) -> None:
+    try:
+        logger.info("ページ: url=%s", page.url)
+    except Exception as e:
+        logger.warning("ページ url 取得失敗: %s", e)
+    try:
+        logger.info("ページ: title=%r", (page.title() or "").strip())
+    except Exception as e:
+        logger.warning("ページ title 取得失敗: %s", e)
+
+
+def _write_gemini_debug_artifacts(page: Page, reason: str) -> None:
+    """HTML・フルページ画像・body 抜粋。未ログイン/bot/言語違いの切り分け用。"""
+    base = _REPO_DIR
+    try:
+        p_png = base / GEMINI_DEBUG_FULL_PNG
+        page.screenshot(path=str(p_png), full_page=True, timeout=180_000)
+        logger.info("診断: フルページ画像 %s（%s）", p_png, reason)
+    except Exception as e:
+        logger.warning("診断: フルページ画像失敗: %s", e)
+    try:
+        html = page.content()
+        if len(html) > GEMINI_DEBUG_HTML_MAX_CHARS:
+            html = (
+                html[: GEMINI_DEBUG_HTML_MAX_CHARS] + f"\n<!-- 省略 {len(html) - GEMINI_DEBUG_HTML_MAX_CHARS} 文字 -->\n"
+            )
+        (base / GEMINI_DEBUG_HTML).write_text(html, encoding="utf-8")
+        logger.info("診断: HTML %s", base / GEMINI_DEBUG_HTML)
+    except Exception as e:
+        logger.warning("診断: HTML 保存失敗: %s", e)
+    try:
+        u = page.url
+        t = (page.title() or "").strip()
+        try:
+            body = page.locator("body").inner_text(timeout=10_000)
+        except Exception:
+            body = ""
+        if len(body) > GEMINI_DEBUG_BODY_MAX_CHARS:
+            body = body[: GEMINI_DEBUG_BODY_MAX_CHARS] + "…\n(省略)"
+        meta = f"reason={reason}\nurl={u}\ntitle={t}\n\n--- body 抜粋（先頭 {GEMINI_DEBUG_BODY_MAX_CHARS} 文字まで）---\n{body}\n"
+        (base / GEMINI_DEBUG_META_TXT).write_text(meta, encoding="utf-8")
+        logger.info("診断: 本文抜粋 %s", base / GEMINI_DEBUG_META_TXT)
+    except Exception as e:
+        logger.warning("診断: meta/本文保存失敗: %s", e)
+
+
 def _click_youtube_chat_entrypoint(
     page: Page, name_pattern: str, click_timeout_ms: int
 ) -> None:
@@ -1361,9 +1418,25 @@ def action_gemini(
         logger.info("スクリーンショット: %s", shot)
     except Exception as e:
         logger.warning("スクリーンショット失敗: %s", e)
+    _log_gemini_page_brief(page)
+    if _gemini_debug_artifacts_enabled():
+        _write_gemini_debug_artifacts(page, "YOUTUBE_CDP_GEMINI_DEBUG=1")
     if settle_seconds > 0:
         time.sleep(settle_seconds)
-    _click_youtube_chat_entrypoint(page, name_pattern, click_timeout_ms)
+    try:
+        _click_youtube_chat_entrypoint(page, name_pattern, click_timeout_ms)
+    except Exception as e:
+        _write_gemini_debug_artifacts(page, f"Gemini 入口失敗: {e!r}")
+        logger.error(
+            "Gemini チャット入口（「質問する」等）に到達できませんでした。"
+            " 未ログイン・ボット確認画面・UI 言語・リージョンでボタン文言が違う場合があります。"
+            " 診断ファイル（%s / %s / %s）を確認するか、"
+            " 事前に YOUTUBE_CDP_GEMINI_DEBUG=1 で常に同ファイルを出せます。",
+            GEMINI_DEBUG_FULL_PNG,
+            GEMINI_DEBUG_HTML,
+            GEMINI_DEBUG_META_TXT,
+        )
+        raise
     if after_entry_seconds > 0:
         time.sleep(after_entry_seconds)
     in_chat_md_before = page.locator(SELECTOR_MARKDOWN_IN_CHAT_ITEM).count()
