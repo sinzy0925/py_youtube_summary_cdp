@@ -47,6 +47,9 @@ REPO_CHROME_CDP_PROFILE = _REPO_DIR / "chrome_cdp_profile"
 YOUTUBE = "https://www.youtube.com/"
 # 依頼例の動画。--url で上書き可。
 DEFAULT_GEMINI_VIDEO = "https://www.youtube.com/watch?v=O8PzL3S-TbU"
+# gemini: 動画ページ表示直後の待機秒 → スクリーンショット
+GEMINI_POST_GOTO_SCREENSHOT_SEC = 2.0
+GEMINI_SCREENSHOT_FILENAME = "youtube_cdp_screenshot.png"
 # 上記のセレクタで取れないときの accessible name 用（英語UI等・大小文字は re.IGNORECASE）
 DEFAULT_GEMINI_NAME_PATTERN = r"(質問する|gemini|ask)"
 # 動画下メニュー「質問する」（Gemini チャット入口）:
@@ -1351,6 +1354,13 @@ def action_gemini(
     browser = _connect_over_cdp_logged(p, cdp)
     page = get_page(browser)
     _page_goto_logged(page, url)
+    time.sleep(GEMINI_POST_GOTO_SCREENSHOT_SEC)
+    shot = _REPO_DIR / GEMINI_SCREENSHOT_FILENAME
+    try:
+        page.screenshot(path=str(shot), full_page=False)
+        logger.info("スクリーンショット: %s", shot)
+    except Exception as e:
+        logger.warning("スクリーンショット失敗: %s", e)
     if settle_seconds > 0:
         time.sleep(settle_seconds)
     _click_youtube_chat_entrypoint(page, name_pattern, click_timeout_ms)
