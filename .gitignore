@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 
+# Google Cloud Shell から手元に落としたファイル（診断 HTML 等）
+google_shell/
+
 # action_gemini が保存する直近の画面キャプチャ
 youtube_cdp_screenshot.png
 youtube_cdp_gemini_debug.html
